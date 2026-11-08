@@ -10,12 +10,26 @@ android {
         applicationId 'com.narezany.myvpn'
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '1.1'
+    }
+
+    signingConfigs {
+        // Постоянный ключ, чтобы обновления ставились поверх без удаления.
+        stable {
+            storeFile rootProject.file('keystore/myvpn.keystore')
+            storePassword 'myvpn2024'
+            keyAlias 'myvpn'
+            keyPassword 'myvpn2024'
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.stable
+        }
         release {
+            signingConfig signingConfigs.stable
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
