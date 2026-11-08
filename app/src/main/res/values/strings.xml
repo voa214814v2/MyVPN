@@ -20,7 +20,20 @@
     <string name="mode_warp">WARP</string>
     <string name="mode_custom">Конфиг</string>
 
-    <string name="hint">WARP включается одной кнопкой и не требует сервера. Свой конфиг — вставь текст .conf от WireGuard/AmneziaWG.</string>
+    <string name="theme_title">Темы</string>
+    <string name="theme_subtitle">Цвет акцента</string>
+    <string name="theme_current">Выбрано: %1$s</string>
+    <string name="theme_note">Цвет кнопки, вкладок и заголовков меняется сразу и сохраняется между запусками.</string>
+
+    <string name="logs_title">Логи</string>
+    <string name="logs_refresh">Обновить</string>
+    <string name="logs_copy">Скопировать</string>
+    <string name="logs_clear">Очистить</string>
+    <string name="logs_empty">Пока пусто. Включи VPN — здесь появятся записи.</string>
+    <string name="logs_copied">Логи скопированы</string>
+    <string name="logs_cleared">Логи очищены</string>
+
+    <string name="help_title">Инструкция</string>
 
     <string name="config_title">Конфиг WireGuard</string>
     <string name="config_hint">[Interface]\nPrivateKey = …</string>
@@ -29,10 +42,12 @@
 
     <string name="log_vpn_denied">Разрешение на VPN не выдано</string>
     <string name="log_connected">Туннель поднят</string>
+    <string name="log_disconnected">Туннель опущен</string>
     <string name="log_error">Ошибка:</string>
     <string name="log_config_saved">Конфиг сохранён</string>
     <string name="log_bad_config">Конфиг не подошёл:</string>
     <string name="log_registering">Регистрируюсь в WARP…</string>
+    <string name="log_app_start">Приложение запущено</string>
 
     <string name="err_no_config">сначала вставь конфиг</string>
 

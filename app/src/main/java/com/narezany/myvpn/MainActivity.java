@@ -3,10 +3,14 @@ package com.narezany.myvpn;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -14,9 +18,12 @@ import android.os.Looper;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.wireguard.config.Config;
 
@@ -31,6 +38,11 @@ public class MainActivity extends Activity {
     private static final int REQ_VPN = 1001;
     private static final int REQ_NOTIFICATIONS = 1002;
 
+    private static final int TAB_VPN = 0;
+    private static final int TAB_THEMES = 1;
+    private static final int TAB_LOGS = 2;
+    private static final int TAB_HELP = 3;
+
     private static final String PREFS = "vpn";
     private static final String KEY_MODE = "mode";
     private static final String KEY_WARP = "warp_conf";
@@ -42,15 +54,32 @@ public class MainActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
     private SharedPreferences prefs;
+
+    private View panelVpn;
+    private View panelThemes;
+    private View panelLogs;
+    private View panelHelp;
+
+    private TextView tabVpn;
+    private TextView tabThemes;
+    private TextView tabLogs;
+    private TextView tabHelp;
+
     private TextView statusView;
     private TextView statsView;
     private TextView sourceView;
     private TextView toggleView;
-    private TextView logView;
+    private TextView miniLog;
     private TextView warpChip;
     private TextView customChip;
 
+    private LinearLayout swatches;
+    private TextView themeName;
+    private TextView logsText;
+    private LinearLayout helpContainer;
+
     private boolean busy;
+    private int tab = TAB_VPN;
 
     private final Runnable statsTicker = new Runnable() {
         @Override
@@ -68,19 +97,52 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        panelVpn = findViewById(R.id.panel_vpn);
+        panelThemes = findViewById(R.id.panel_themes);
+        panelLogs = findViewById(R.id.panel_logs);
+        panelHelp = findViewById(R.id.panel_help);
+
+        tabVpn = findViewById(R.id.tab_vpn);
+        tabThemes = findViewById(R.id.tab_themes);
+        tabLogs = findViewById(R.id.tab_logs);
+        tabHelp = findViewById(R.id.tab_help);
+
         statusView = findViewById(R.id.status);
         statsView = findViewById(R.id.stats);
         sourceView = findViewById(R.id.source);
         toggleView = findViewById(R.id.toggle);
-        logView = findViewById(R.id.log);
+        miniLog = findViewById(R.id.mini_log);
         warpChip = findViewById(R.id.mode_warp);
         customChip = findViewById(R.id.mode_custom);
+
+        swatches = findViewById(R.id.swatches);
+        themeName = findViewById(R.id.theme_name);
+        logsText = findViewById(R.id.logs_text);
+        helpContainer = findViewById(R.id.help_container);
 
         toggleView.setOnClickListener(v -> toggle());
         warpChip.setOnClickListener(v -> selectMode(MODE_WARP));
         customChip.setOnClickListener(v -> showConfigDialog());
 
+        tabVpn.setOnClickListener(v -> showTab(TAB_VPN));
+        tabThemes.setOnClickListener(v -> showTab(TAB_THEMES));
+        tabLogs.setOnClickListener(v -> showTab(TAB_LOGS));
+        tabHelp.setOnClickListener(v -> showTab(TAB_HELP));
+
+        findViewById(R.id.logs_refresh).setOnClickListener(v -> refreshLogs());
+        findViewById(R.id.logs_copy).setOnClickListener(v -> copyLogs());
+        findViewById(R.id.logs_clear).setOnClickListener(v -> {
+            Logs.clear(this);
+            refreshLogs();
+            Toast.makeText(this, R.string.logs_cleared, Toast.LENGTH_SHORT).show();
+        });
+
         askForNotifications();
+        log(getString(R.string.log_app_start));
+        buildSwatches();
+        buildHelp();
+        showTab(TAB_VPN);
         refreshUi();
     }
 
@@ -115,6 +177,100 @@ public class MainActivity extends Activity {
             }
         }
     }
+
+    // ---------- вкладки ----------
+
+    private void showTab(final int index) {
+        tab = index;
+        panelVpn.setVisibility(index == TAB_VPN ? View.VISIBLE : View.GONE);
+        panelThemes.setVisibility(index == TAB_THEMES ? View.VISIBLE : View.GONE);
+        panelLogs.setVisibility(index == TAB_LOGS ? View.VISIBLE : View.GONE);
+        panelHelp.setVisibility(index == TAB_HELP ? View.VISIBLE : View.GONE);
+
+        refreshTabColors(Theme.accent(this));
+
+        if (index == TAB_THEMES) buildSwatches();
+        if (index == TAB_LOGS) refreshLogs();
+        if (index == TAB_HELP) buildHelp();
+    }
+
+    private void refreshTabColors(final int accent) {
+        final int muted = getColor(R.color.muted);
+        tabVpn.setTextColor(tab == TAB_VPN ? accent : muted);
+        tabThemes.setTextColor(tab == TAB_THEMES ? accent : muted);
+        tabLogs.setTextColor(tab == TAB_LOGS ? accent : muted);
+        tabHelp.setTextColor(tab == TAB_HELP ? accent : muted);
+    }
+
+    private void buildSwatches() {
+        swatches.removeAllViews();
+        final int accent = Theme.accent(this);
+        LinearLayout row = null;
+
+        for (int i = 0; i < Theme.PRESETS.length; i++) {
+            if (i % 4 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                swatches.addView(row);
+            }
+            final int color = Theme.PRESETS[i];
+            final boolean selected = color == accent;
+
+            final View swatch = new View(this);
+            final LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    Theme.dp(this, 54), Theme.dp(this, 54));
+            params.setMargins(Theme.dp(this, 5), Theme.dp(this, 5), Theme.dp(this, 5), Theme.dp(this, 5));
+            swatch.setLayoutParams(params);
+
+            final GradientDrawable drawable = new GradientDrawable();
+            drawable.setShape(GradientDrawable.OVAL);
+            drawable.setColor(color);
+            drawable.setStroke(Theme.dp(this, selected ? 3 : 1),
+                    selected ? 0xFFFFFFFF : 0x33FFFFFF);
+            swatch.setBackground(drawable);
+
+            swatch.setOnClickListener(v -> {
+                Theme.setAccent(this, color);
+                buildSwatches();
+                buildHelp();
+                refreshUi();
+            });
+            row.addView(swatch);
+        }
+
+        themeName.setText(getString(R.string.theme_current, Theme.nameOf(accent)));
+    }
+
+    private void buildHelp() {
+        helpContainer.removeAllViews();
+        final int accent = Theme.accent(this);
+
+        for (final String[] section : Help.SECTIONS) {
+            final TextView title = new TextView(this);
+            title.setText(section[0]);
+            title.setTextColor(accent);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+            title.setTypeface(null, Typeface.BOLD);
+            final LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            titleParams.topMargin = Theme.dp(this, 18);
+            title.setLayoutParams(titleParams);
+            helpContainer.addView(title);
+
+            final TextView body = new TextView(this);
+            body.setText(section[1]);
+            body.setTextColor(getColor(R.color.muted));
+            body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            body.setLineSpacing(Theme.dp(this, 3), 1f);
+            final LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            bodyParams.topMargin = Theme.dp(this, 6);
+            body.setLayoutParams(bodyParams);
+            helpContainer.addView(body);
+        }
+    }
+
+    // ---------- туннель ----------
 
     private void toggle() {
         if (busy) return;
@@ -163,6 +319,7 @@ public class MainActivity extends Activity {
         VpnManager.get(getApplicationContext()).disconnect((ok, error) -> ui.post(() -> {
             stopService(new Intent(this, KeepAliveService.class));
             setBusy(false, null);
+            log(getString(R.string.log_disconnected));
             refreshUi();
         }));
     }
@@ -170,7 +327,9 @@ public class MainActivity extends Activity {
     private String ensureConfig() throws Exception {
         if (MODE_CUSTOM.equals(prefs.getString(KEY_MODE, MODE_WARP))) {
             final String custom = prefs.getString(KEY_CUSTOM, "");
-            if (custom.trim().isEmpty()) throw new IllegalStateException(getString(R.string.err_no_config));
+            if (custom.trim().isEmpty()) {
+                throw new IllegalStateException(getString(R.string.err_no_config));
+            }
             return custom;
         }
         String warp = prefs.getString(KEY_WARP, "");
@@ -197,6 +356,8 @@ public class MainActivity extends Activity {
         refreshUi();
     }
 
+    // ---------- конфиг ----------
+
     private void showConfigDialog() {
         final EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_CLASS_TEXT
@@ -209,7 +370,7 @@ public class MainActivity extends Activity {
         input.setText(prefs.getString(KEY_CUSTOM, ""));
         input.setHint(R.string.config_hint);
 
-        final int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        final int pad = Theme.dp(this, 16);
         final FrameLayout container = new FrameLayout(this);
         container.setPadding(pad, pad / 2, pad, 0);
         container.addView(input);
@@ -217,7 +378,8 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.config_title)
                 .setView(container)
-                .setPositiveButton(R.string.save, (dialog, which) -> saveCustomConfig(input.getText().toString()))
+                .setPositiveButton(R.string.save,
+                        (dialog, which) -> saveCustomConfig(input.getText().toString()))
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }
@@ -234,13 +396,16 @@ public class MainActivity extends Activity {
         refreshUi();
     }
 
+    // ---------- отрисовка ----------
+
     private void refreshUi() {
+        final int accent = Theme.accent(this);
         final boolean up = VpnManager.get(getApplicationContext()).isUp();
         final boolean warp = !MODE_CUSTOM.equals(prefs.getString(KEY_MODE, MODE_WARP));
 
         sourceView.setText(warp ? R.string.source_warp : R.string.source_custom);
-        warpChip.setBackgroundResource(warp ? R.drawable.bg_chip_on : R.drawable.bg_chip);
-        customChip.setBackgroundResource(warp ? R.drawable.bg_chip : R.drawable.bg_chip_on);
+        warpChip.setBackground(Theme.chip(this, warp, accent));
+        customChip.setBackground(Theme.chip(this, !warp, accent));
 
         if (busy) {
             statusView.setText(R.string.status_working);
@@ -254,9 +419,11 @@ public class MainActivity extends Activity {
         }
 
         toggleView.setText(up ? R.string.btn_off : R.string.btn_on);
-        toggleView.setBackgroundResource(up ? R.drawable.bg_btn_off : R.drawable.bg_btn_on);
+        toggleView.setBackground(Theme.circle(this, up ? getColor(R.color.danger) : accent));
         toggleView.setAlpha(busy ? 0.5f : 1f);
 
+        miniLog.setText(Logs.recent(this, 2));
+        refreshTabColors(accent);
         refreshStats();
     }
 
@@ -279,15 +446,25 @@ public class MainActivity extends Activity {
         statsView.setText(getString(R.string.stats_fmt, human(values[0]), human(values[1])));
     }
 
+    private void refreshLogs() {
+        final String text = Logs.text(this);
+        logsText.setText(text.isEmpty() ? getString(R.string.logs_empty) : text);
+    }
+
+    private void copyLogs() {
+        String text = Logs.text(this);
+        if (text.isEmpty()) text = getString(R.string.logs_empty);
+        final ClipboardManager manager =
+                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (manager == null) return;
+        manager.setPrimaryClip(ClipData.newPlainText("vpn logs", text));
+        Toast.makeText(this, R.string.logs_copied, Toast.LENGTH_SHORT).show();
+    }
+
     private void log(final String line) {
-        final String current = logView.getText().toString();
-        final String[] lines = current.isEmpty() ? new String[0] : current.split("\n");
-        final StringBuilder sb = new StringBuilder();
-        for (int i = Math.max(0, lines.length - 3); i < lines.length; i++) {
-            sb.append(lines[i]).append('\n');
-        }
-        sb.append(line);
-        logView.setText(sb.toString());
+        Logs.add(this, line);
+        miniLog.setText(Logs.recent(this, 2));
+        if (tab == TAB_LOGS) refreshLogs();
     }
 
     private void askForNotifications() {
