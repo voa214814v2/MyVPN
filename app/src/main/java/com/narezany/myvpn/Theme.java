@@ -55,6 +55,16 @@ public final class Theme {
         return drawable;
     }
 
+    public static GradientDrawable banner(final Context context, final int accent) {
+        final GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{blend(accent, 0xFF000000, 0.55f), blend(accent, 0xFF000000, 0.82f)});
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setCornerRadius(dp(context, 14));
+        drawable.setStroke(dp(context, 1), blend(accent, 0xFFFFFFFF, 0.25f));
+        return drawable;
+    }
+
     public static int dp(final Context context, final int value) {
         return (int) (value * context.getResources().getDisplayMetrics().density);
     }

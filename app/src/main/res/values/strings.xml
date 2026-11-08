@@ -55,4 +55,28 @@
     <string name="notif_title">VPN подключён</string>
     <string name="notif_text">Нажми, чтобы открыть приложение</string>
     <string name="notif_stop">Отключить</string>
+
+    <string name="key_desc">Ключ: подключить VPN и накопить ключи</string>
+    <string name="keys_count">🔑 %1$d</string>
+    <string name="keys_level">Уровень %1$d · %2$s</string>
+    <string name="keys_progress">%1$d / %2$d до уровня %3$d</string>
+    <string name="btn_disconnect">Отключить</string>
+
+    <string name="update_ready">⬆ Обновление %1$s — нажми, чтобы поставить</string>
+    <string name="update_downloading">⬇ Скачиваю обновление…</string>
+    <string name="update_installing">Открываю установщик…</string>
+    <string name="update_check">Версия %1$s · проверить обновление</string>
+    <string name="update_checking">Версия %1$s · проверяю…</string>
+    <string name="update_latest">Версия %1$s · обновлений нет</string>
+    <string name="update_failed">Версия %1$s · не удалось проверить</string>
+    <string name="update_toast_latest">У тебя последняя версия %1$s</string>
+    <string name="update_toast_failed">Не удалось проверить обновления</string>
+    <string name="update_perm_title">Нужно разрешение</string>
+    <string name="update_perm_text">Чтобы обновление поставилось само, разреши «Мой VPN» установку приложений. Открыть настройки?</string>
+    <string name="update_open_settings">Открыть</string>
+
+    <string name="log_update_available">Доступно обновление %1$s</string>
+    <string name="log_update_downloaded">Обновление скачано</string>
+    <string name="log_update_error">Обновление: </string>
+    <string name="log_level_up">Новый уровень %1$d — %2$s</string>
 </resources>

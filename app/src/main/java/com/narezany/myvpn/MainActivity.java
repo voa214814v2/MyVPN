@@ -1,6 +1,8 @@
 package com.narezany.myvpn;
 
 import android.Manifest;
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
@@ -8,6 +10,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -19,9 +22,11 @@ import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -68,10 +73,19 @@ public class MainActivity extends Activity {
     private TextView statusView;
     private TextView statsView;
     private TextView sourceView;
-    private TextView toggleView;
     private TextView miniLog;
     private TextView warpChip;
     private TextView customChip;
+
+    private KeyClickerView keyView;
+    private TextView keysCount;
+    private TextView keysLevel;
+    private TextView keysProgressText;
+    private ProgressBar keysProgress;
+    private TextView disconnectView;
+
+    private TextView updateBanner;
+    private TextView versionRow;
 
     private LinearLayout swatches;
     private TextView themeName;
@@ -79,7 +93,17 @@ public class MainActivity extends Activity {
     private LinearLayout helpContainer;
 
     private boolean busy;
+    private int busyMessage;
     private int tab = TAB_VPN;
+    private int lastAccent;
+    private int lastClicks;
+    private int lastStatusColor;
+    private String lastStatusText = "";
+
+    private UpdateChecker.Info pendingUpdate;
+    private boolean updateBusy;
+    private boolean updateChecked;
+    private int loggedUpdateCode;
 
     private final Runnable statsTicker = new Runnable() {
         @Override
@@ -97,6 +121,8 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        lastAccent = Theme.accent(this);
+        lastClicks = Clicker.clicks(this);
 
         panelVpn = findViewById(R.id.panel_vpn);
         panelThemes = findViewById(R.id.panel_themes);
@@ -111,17 +137,32 @@ public class MainActivity extends Activity {
         statusView = findViewById(R.id.status);
         statsView = findViewById(R.id.stats);
         sourceView = findViewById(R.id.source);
-        toggleView = findViewById(R.id.toggle);
         miniLog = findViewById(R.id.mini_log);
         warpChip = findViewById(R.id.mode_warp);
         customChip = findViewById(R.id.mode_custom);
+
+        keyView = findViewById(R.id.key_view);
+        keysCount = findViewById(R.id.keys_count);
+        keysLevel = findViewById(R.id.keys_level);
+        keysProgressText = findViewById(R.id.keys_progress_text);
+        keysProgress = findViewById(R.id.keys_progress);
+        disconnectView = findViewById(R.id.disconnect);
+
+        updateBanner = findViewById(R.id.update_banner);
+        versionRow = findViewById(R.id.version_row);
 
         swatches = findViewById(R.id.swatches);
         themeName = findViewById(R.id.theme_name);
         logsText = findViewById(R.id.logs_text);
         helpContainer = findViewById(R.id.help_container);
 
-        toggleView.setOnClickListener(v -> toggle());
+        keyView.setOnClickListener(v -> onKeyTap());
+        disconnectView.setOnClickListener(v -> {
+            if (!busy) stopTunnel();
+        });
+        updateBanner.setOnClickListener(v -> onUpdateBannerClick());
+        versionRow.setOnClickListener(v -> checkUpdates(true));
+
         warpChip.setOnClickListener(v -> selectMode(MODE_WARP));
         customChip.setOnClickListener(v -> showConfigDialog());
 
@@ -152,6 +193,10 @@ public class MainActivity extends Activity {
         refreshUi();
         ui.removeCallbacks(statsTicker);
         ui.post(statsTicker);
+        if (!updateChecked) {
+            updateChecked = true;
+            ui.postDelayed(() -> checkUpdates(false), 1500);
+        }
     }
 
     @Override
@@ -163,6 +208,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        ui.removeCallbacksAndMessages(null);
         io.shutdownNow();
     }
 
@@ -181,25 +227,58 @@ public class MainActivity extends Activity {
     // ---------- вкладки ----------
 
     private void showTab(final int index) {
+        final int previous = tab;
         tab = index;
-        panelVpn.setVisibility(index == TAB_VPN ? View.VISIBLE : View.GONE);
-        panelThemes.setVisibility(index == TAB_THEMES ? View.VISIBLE : View.GONE);
-        panelLogs.setVisibility(index == TAB_LOGS ? View.VISIBLE : View.GONE);
-        panelHelp.setVisibility(index == TAB_HELP ? View.VISIBLE : View.GONE);
 
-        refreshTabColors(Theme.accent(this));
+        final View[] panels = {panelVpn, panelThemes, panelLogs, panelHelp};
+        for (int i = 0; i < panels.length; i++) {
+            final View panel = panels[i];
+            final int panelIndex = i;
+            panel.animate().cancel();
+            if (i == index) {
+                panel.setVisibility(View.VISIBLE);
+                if (previous != index) {
+                    panel.setAlpha(0f);
+                    panel.setTranslationY(Theme.dp(this, 14));
+                    panel.animate().alpha(1f).translationY(0f).setDuration(220)
+                            .setInterpolator(new DecelerateInterpolator()).start();
+                } else {
+                    panel.setAlpha(1f);
+                    panel.setTranslationY(0f);
+                }
+            } else if (panel.getVisibility() == View.VISIBLE) {
+                panel.animate().alpha(0f).translationY(Theme.dp(this, -8))
+                        .setDuration(120).withEndAction(() -> {
+                            if (tab != panelIndex) {
+                                panel.setVisibility(View.GONE);
+                                panel.setAlpha(1f);
+                                panel.setTranslationY(0f);
+                            }
+                        }).start();
+            }
+        }
+
+        animateTabColors(Theme.accent(this));
 
         if (index == TAB_THEMES) buildSwatches();
         if (index == TAB_LOGS) refreshLogs();
         if (index == TAB_HELP) buildHelp();
     }
 
-    private void refreshTabColors(final int accent) {
+    private void animateTabColors(final int accent) {
+        final TextView[] tabs = {tabVpn, tabThemes, tabLogs, tabHelp};
         final int muted = getColor(R.color.muted);
-        tabVpn.setTextColor(tab == TAB_VPN ? accent : muted);
-        tabThemes.setTextColor(tab == TAB_THEMES ? accent : muted);
-        tabLogs.setTextColor(tab == TAB_LOGS ? accent : muted);
-        tabHelp.setTextColor(tab == TAB_HELP ? accent : muted);
+        for (int i = 0; i < tabs.length; i++) {
+            final TextView view = tabs[i];
+            final int from = view.getCurrentTextColor();
+            final int to = i == tab ? accent : muted;
+            if (from == to) continue;
+            final ValueAnimator animator = ValueAnimator.ofObject(new ArgbEvaluator(), from, to);
+            animator.setDuration(220);
+            animator.addUpdateListener(animation ->
+                    view.setTextColor((Integer) animation.getAnimatedValue()));
+            animator.start();
+        }
     }
 
     private void buildSwatches() {
@@ -228,6 +307,7 @@ public class MainActivity extends Activity {
             drawable.setStroke(Theme.dp(this, selected ? 3 : 1),
                     selected ? 0xFFFFFFFF : 0x33FFFFFF);
             swatch.setBackground(drawable);
+            swatch.setAlpha(selected ? 1f : 0.9f);
 
             swatch.setOnClickListener(v -> {
                 Theme.setAccent(this, color);
@@ -270,6 +350,46 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ---------- кликер ----------
+
+    private void onKeyTap() {
+        final int clicks = Clicker.add(this);
+        final int oldLevel = Clicker.level(lastClicks);
+        final int newLevel = Clicker.level(clicks);
+        lastClicks = clicks;
+        updateClicker(clicks, true);
+
+        if (newLevel > oldLevel) {
+            final String line = getString(R.string.log_level_up, newLevel, Clicker.rank(newLevel));
+            Toast.makeText(this, line, Toast.LENGTH_SHORT).show();
+            log(line);
+        }
+
+        if (!busy && !VpnManager.get(getApplicationContext()).isUp()) {
+            toggle();
+        }
+    }
+
+    private void updateClicker(final int clicks, final boolean bounce) {
+        final int level = Clicker.level(clicks);
+        final int inLevel = Clicker.inLevel(clicks);
+        keysCount.setText(getString(R.string.keys_count, clicks));
+        keysLevel.setText(getString(R.string.keys_level, level, Clicker.rank(level)));
+        keysProgress.setMax(Clicker.PER_LEVEL);
+        keysProgress.setProgress(inLevel);
+        keysProgressText.setText(getString(
+                R.string.keys_progress, inLevel, Clicker.PER_LEVEL, level + 1));
+        keysProgress.getProgressDrawable().setTint(Theme.accent(this));
+
+        if (bounce) {
+            keysCount.animate().cancel();
+            keysCount.setScaleX(1.25f);
+            keysCount.setScaleY(1.25f);
+            keysCount.animate().scaleX(1f).scaleY(1f).setDuration(220)
+                    .setInterpolator(new DecelerateInterpolator()).start();
+        }
+    }
+
     // ---------- туннель ----------
 
     private void toggle() {
@@ -287,13 +407,13 @@ public class MainActivity extends Activity {
     }
 
     private void startTunnel() {
-        setBusy(true, getString(R.string.status_connecting));
+        setBusy(true, R.string.status_connecting);
         io.execute(() -> {
             try {
                 final String conf = ensureConfig();
                 final Config config = Config.parse(new BufferedReader(new StringReader(conf)));
                 VpnManager.get(getApplicationContext()).connect(config, (ok, error) -> ui.post(() -> {
-                    setBusy(false, null);
+                    setBusy(false, 0);
                     if (ok) {
                         startKeepAlive();
                         log(getString(R.string.log_connected));
@@ -306,7 +426,7 @@ public class MainActivity extends Activity {
                 }));
             } catch (final Exception e) {
                 ui.post(() -> {
-                    setBusy(false, null);
+                    setBusy(false, 0);
                     log(getString(R.string.log_error) + " " + describe(e));
                     refreshUi();
                 });
@@ -315,10 +435,10 @@ public class MainActivity extends Activity {
     }
 
     private void stopTunnel() {
-        setBusy(true, getString(R.string.status_disconnecting));
+        setBusy(true, R.string.status_disconnecting);
         VpnManager.get(getApplicationContext()).disconnect((ok, error) -> ui.post(() -> {
             stopService(new Intent(this, KeepAliveService.class));
-            setBusy(false, null);
+            setBusy(false, 0);
             log(getString(R.string.log_disconnected));
             refreshUi();
         }));
@@ -396,6 +516,105 @@ public class MainActivity extends Activity {
         refreshUi();
     }
 
+    // ---------- обновления ----------
+
+    private void checkUpdates(final boolean manual) {
+        if (updateBusy) return;
+        updateBusy = true;
+        final String version = versionName();
+        if (manual) versionRow.setText(getString(R.string.update_checking, version));
+
+        UpdateChecker.check(this, (info, error) -> ui.post(() -> {
+            updateBusy = false;
+            if (error != null) {
+                versionRow.setText(getString(R.string.update_failed, version));
+                if (manual) {
+                    Toast.makeText(this, R.string.update_toast_failed, Toast.LENGTH_SHORT).show();
+                }
+                return;
+            }
+
+            if (info.versionCode > versionCode()) {
+                pendingUpdate = info;
+                updateBanner.setText(getString(R.string.update_ready, info.versionName));
+                updateBanner.setVisibility(View.VISIBLE);
+                updateBanner.setAlpha(0f);
+                updateBanner.setScaleX(0.96f);
+                updateBanner.setScaleY(0.96f);
+                updateBanner.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                        .setDuration(260).setInterpolator(new DecelerateInterpolator()).start();
+                versionRow.setText(getString(R.string.update_check, version));
+                if (loggedUpdateCode != info.versionCode) {
+                    loggedUpdateCode = info.versionCode;
+                    log(getString(R.string.log_update_available, info.versionName));
+                }
+            } else {
+                pendingUpdate = null;
+                updateBanner.setVisibility(View.GONE);
+                versionRow.setText(getString(R.string.update_latest, version));
+                if (manual) {
+                    Toast.makeText(this,
+                            getString(R.string.update_toast_latest, version),
+                            Toast.LENGTH_SHORT).show();
+                }
+            }
+        }));
+    }
+
+    private void onUpdateBannerClick() {
+        if (pendingUpdate == null || updateBusy) return;
+
+        if (!UpdateChecker.canInstall(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.update_perm_title)
+                    .setMessage(R.string.update_perm_text)
+                    .setPositiveButton(R.string.update_open_settings,
+                            (dialog, which) -> UpdateChecker.openInstallSettings(this))
+                    .setNegativeButton(R.string.cancel, null)
+                    .show();
+            return;
+        }
+
+        updateBusy = true;
+        updateBanner.setText(R.string.update_downloading);
+
+        UpdateChecker.download(this, pendingUpdate, (apk, error) -> ui.post(() -> {
+            updateBusy = false;
+            if (error != null) {
+                updateBanner.setText(getString(R.string.update_ready, pendingUpdate.versionName));
+                log(getString(R.string.log_update_error) + error);
+                Toast.makeText(this,
+                        getString(R.string.log_update_error) + error,
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            log(getString(R.string.log_update_downloaded));
+            updateBanner.setText(R.string.update_installing);
+            if (!UpdateChecker.install(this, apk)) {
+                Toast.makeText(this, R.string.update_toast_failed, Toast.LENGTH_LONG).show();
+                updateBanner.setText(getString(R.string.update_ready, pendingUpdate.versionName));
+            }
+        }));
+    }
+
+    private int versionCode() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (final Exception e) {
+            return 0;
+        }
+    }
+
+    private String versionName() {
+        try {
+            final PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionName == null ? "?" : info.versionName;
+        } catch (final Exception e) {
+            return "?";
+        }
+    }
+
     // ---------- отрисовка ----------
 
     private void refreshUi() {
@@ -406,34 +625,60 @@ public class MainActivity extends Activity {
         sourceView.setText(warp ? R.string.source_warp : R.string.source_custom);
         warpChip.setBackground(Theme.chip(this, warp, accent));
         customChip.setBackground(Theme.chip(this, !warp, accent));
+        updateBanner.setBackground(Theme.banner(this, accent));
 
         if (busy) {
-            statusView.setText(R.string.status_working);
-            statusView.setTextColor(getColor(R.color.muted));
+            applyStatus(busyMessage != 0 ? busyMessage : R.string.status_working,
+                    getColor(R.color.muted));
         } else if (up) {
-            statusView.setText(R.string.status_on);
-            statusView.setTextColor(getColor(R.color.good));
+            applyStatus(R.string.status_on, getColor(R.color.good));
         } else {
-            statusView.setText(R.string.status_off);
-            statusView.setTextColor(getColor(R.color.text));
+            applyStatus(R.string.status_off, getColor(R.color.text));
         }
 
-        toggleView.setText(up ? R.string.btn_off : R.string.btn_on);
-        toggleView.setBackground(Theme.circle(this, up ? getColor(R.color.danger) : accent));
-        toggleView.setAlpha(busy ? 0.5f : 1f);
+        if (lastAccent != accent) {
+            keyView.animateAccent(lastAccent, accent);
+            lastAccent = accent;
+        } else {
+            keyView.setAccent(accent);
+        }
+        keyView.setConnected(up);
+        keyView.setAlpha(busy ? 0.72f : 1f);
 
+        disconnectView.setVisibility(up ? View.VISIBLE : View.GONE);
+        disconnectView.setAlpha(busy ? 0.5f : 1f);
+
+        updateClicker(Clicker.clicks(this), false);
         miniLog.setText(Logs.recent(this, 2));
-        refreshTabColors(accent);
+        animateTabColors(accent);
         refreshStats();
+
+        if (versionRow.getText().length() == 0) {
+            versionRow.setText(getString(R.string.update_check, versionName()));
+        }
     }
 
-    private void setBusy(final boolean value, final String message) {
+    private void applyStatus(final int textRes, final int color) {
+        final String text = getString(textRes);
+        if (text.equals(lastStatusText) && color == lastStatusColor) return;
+        lastStatusText = text;
+        lastStatusColor = color;
+
+        statusView.animate().cancel();
+        statusView.animate().alpha(0f).translationY(-Theme.dp(this, 4))
+                .setDuration(100).withEndAction(() -> {
+                    statusView.setText(textRes);
+                    statusView.setTextColor(color);
+                    statusView.setTranslationY(Theme.dp(this, 6));
+                    statusView.animate().alpha(1f).translationY(0f).setDuration(200)
+                            .setInterpolator(new DecelerateInterpolator()).start();
+                }).start();
+    }
+
+    private void setBusy(final boolean value, final int messageRes) {
         busy = value;
-        if (message != null) {
-            statusView.setText(message);
-            statusView.setTextColor(getColor(R.color.muted));
-        }
-        toggleView.setAlpha(value ? 0.5f : 1f);
+        busyMessage = messageRes;
+        refreshUi();
     }
 
     private void refreshStats() {

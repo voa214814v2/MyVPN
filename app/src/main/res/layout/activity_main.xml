@@ -41,6 +41,20 @@
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
 
+            <TextView
+                android:id="@+id/update_banner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_chip_on"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="12dp"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -68,27 +82,81 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <FrameLayout
+            <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:minHeight="160dp">
+                android:fillViewport="true"
+                android:scrollbars="none">
 
-                <TextView
-                    android:id="@+id/toggle"
-                    android:layout_width="132dp"
-                    android:layout_height="132dp"
-                    android:layout_gravity="center"
-                    android:background="@drawable/bg_btn_on"
-                    android:clickable="true"
-                    android:elevation="6dp"
-                    android:focusable="true"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:gravity="center"
-                    android:text="@string/btn_on"
-                    android:textColor="#FFFFFF"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
-            </FrameLayout>
+                    android:orientation="vertical"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <com.narezany.myvpn.KeyClickerView
+                        android:id="@+id/key_view"
+                        android:layout_width="168dp"
+                        android:layout_height="168dp"
+                        android:contentDescription="@string/key_desc" />
+
+                    <TextView
+                        android:id="@+id/keys_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="@color/text"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/keys_level"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp" />
+
+                    <ProgressBar
+                        android:id="@+id/keys_progress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="168dp"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="7dp"
+                        android:max="25"
+                        android:progress="0"
+                        android:progressBackgroundTint="@color/line"
+                        android:progressTint="@color/accent" />
+
+                    <TextView
+                        android:id="@+id/keys_progress_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="@color/muted"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/disconnect"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingStart="18dp"
+                        android:paddingTop="7dp"
+                        android:paddingEnd="18dp"
+                        android:paddingBottom="7dp"
+                        android:text="@string/btn_disconnect"
+                        android:textColor="@color/text"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </ScrollView>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -308,6 +376,19 @@
                 android:textColor="@color/text"
                 android:textSize="26sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/version_row"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:paddingEnd="8dp"
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
 
             <ScrollView
                 android:layout_width="match_parent"
