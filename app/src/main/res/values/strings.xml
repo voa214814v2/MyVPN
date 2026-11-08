@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Мой VPN</string>
+
+    <string name="source_warp">Источник: WARP (бесплатно)</string>
+    <string name="source_custom">Источник: свой конфиг</string>
+
+    <string name="status_off">Отключено</string>
+    <string name="status_on">Подключено</string>
+    <string name="status_working">Секунду…</string>
+    <string name="status_connecting">Подключаюсь…</string>
+    <string name="status_disconnecting">Отключаюсь…</string>
+
+    <string name="btn_on">ВКЛ</string>
+    <string name="btn_off">ВЫКЛ</string>
+
+    <string name="stats_zero">↓ 0 Б   ↑ 0 Б</string>
+    <string name="stats_fmt">↓ %1$s   ↑ %2$s</string>
+
+    <string name="mode_warp">WARP</string>
+    <string name="mode_custom">Конфиг</string>
+
+    <string name="hint">WARP включается одной кнопкой и не требует сервера. Свой конфиг — вставь текст .conf от WireGuard/AmneziaWG.</string>
+
+    <string name="config_title">Конфиг WireGuard</string>
+    <string name="config_hint">[Interface]\nPrivateKey = …</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+
+    <string name="log_vpn_denied">Разрешение на VPN не выдано</string>
+    <string name="log_connected">Туннель поднят</string>
+    <string name="log_error">Ошибка:</string>
+    <string name="log_config_saved">Конфиг сохранён</string>
+    <string name="log_bad_config">Конфиг не подошёл:</string>
+    <string name="log_registering">Регистрируюсь в WARP…</string>
+
+    <string name="err_no_config">сначала вставь конфиг</string>
+
+    <string name="notif_channel">Состояние VPN</string>
+    <string name="notif_title">VPN подключён</string>
+    <string name="notif_text">Нажми, чтобы открыть приложение</string>
+    <string name="notif_stop">Отключить</string>
+</resources>
