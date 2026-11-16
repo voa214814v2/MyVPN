@@ -10,8 +10,8 @@ android {
         applicationId 'com.narezany.myvpn'
         minSdk 26
         targetSdk 34
-        versionCode 3
-        versionName '1.2'
+        versionCode 4
+        versionName '1.3'
     }
 
     signingConfigs {
@@ -48,6 +48,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.wireguard.android:tunnel:1.0.20230706'
+    // AmneziaWG: понимает и обычный WireGuard, и обфусцированные конфиги (Jc/Jmin/Jmax/S1/S2/H1..H4).
+    implementation 'com.zaneschepke:amneziawg-android:2.3.7'
     implementation 'androidx.core:core:1.13.1'
 }

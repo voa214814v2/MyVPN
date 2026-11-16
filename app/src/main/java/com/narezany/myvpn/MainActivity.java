@@ -30,7 +30,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.wireguard.config.Config;
+import org.amnezia.awg.config.Config;
 
 import java.io.BufferedReader;
 import java.io.StringReader;

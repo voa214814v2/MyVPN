@@ -35,8 +35,8 @@
 
     <string name="help_title">Инструкция</string>
 
-    <string name="config_title">Конфиг WireGuard</string>
-    <string name="config_hint">[Interface]\nPrivateKey = …</string>
+    <string name="config_title">Конфиг WireGuard / AmneziaWG</string>
+    <string name="config_hint">[Interface]\nPrivateKey = …\nJc = 4\nJmin = 40\n…</string>
     <string name="save">Сохранить</string>
     <string name="cancel">Отмена</string>
 

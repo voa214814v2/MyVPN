@@ -2,10 +2,11 @@ package com.narezany.myvpn;
 
 import android.content.Context;
 
-import com.wireguard.android.backend.GoBackend;
-import com.wireguard.android.backend.Statistics;
-import com.wireguard.android.backend.Tunnel;
-import com.wireguard.config.Config;
+import org.amnezia.awg.backend.GoBackend;
+import org.amnezia.awg.backend.NoopTunnelActionHandler;
+import org.amnezia.awg.backend.Statistics;
+import org.amnezia.awg.backend.Tunnel;
+import org.amnezia.awg.config.Config;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -13,6 +14,9 @@ import java.util.concurrent.Executors;
 /**
  * Единственный туннель приложения: держит GoBackend и текущее состояние.
  * Все вызовы к backend блокирующие, поэтому выполняются в отдельном потоке.
+ *
+ * Бэкенд — AmneziaWG: он понимает и обычный WireGuard (в том числе конфиг WARP),
+ * и обфусцированный AmneziaWG, поэтому DPI видит не чистый WireGuard.
  */
 public final class VpnManager implements Tunnel {
 
@@ -27,7 +31,7 @@ public final class VpnManager implements Tunnel {
     private volatile Tunnel.State state = Tunnel.State.DOWN;
 
     private VpnManager(final Context appContext) {
-        backend = new GoBackend(appContext);
+        backend = new GoBackend(appContext, new NoopTunnelActionHandler());
     }
 
     public static synchronized VpnManager get(final Context context) {
@@ -45,6 +49,18 @@ public final class VpnManager implements Tunnel {
     @Override
     public void onStateChange(final Tunnel.State newState) {
         state = newState;
+    }
+
+    /** false — резолвить имена в IPv4 (обычный случай для мобильных сетей). */
+    @Override
+    public Boolean isIpv4ResolutionPreferred() {
+        return Boolean.FALSE;
+    }
+
+    /** Сеть считаем не лимитированной, чтобы Android не резал фоновый трафик. */
+    @Override
+    public Boolean isMetered() {
+        return Boolean.FALSE;
     }
 
     public boolean isUp() {

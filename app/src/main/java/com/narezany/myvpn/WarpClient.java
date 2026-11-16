@@ -1,6 +1,6 @@
 package com.narezany.myvpn;
 
-import com.wireguard.crypto.KeyPair;
+import org.amnezia.awg.crypto.KeyPair;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
