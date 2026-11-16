@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace 'com.narezany.myvpn'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId 'com.narezany.myvpn'
@@ -47,8 +47,17 @@ android {
     }
 }
 
+// hevtunnel тянет androidx.core 1.17.0, которому нужен compileSdk 36 и AGP 8.9.
+// Нам нужен только обычный GoBackend, HEV-туннель не используется — фиксируем версию.
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.core:core:1.16.0'
+        force 'androidx.core:core-ktx:1.16.0'
+    }
+}
+
 dependencies {
     // AmneziaWG: понимает и обычный WireGuard, и обфусцированные конфиги (Jc/Jmin/Jmax/S1/S2/H1..H4).
     implementation 'com.zaneschepke:amneziawg-android:2.3.7'
-    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.core:core:1.16.0'
 }
