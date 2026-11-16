@@ -44,6 +44,18 @@ android {
         jniLibs {
             useLegacyPackaging true
         }
+        resources {
+            // okhttp/okio тянут одинаковые META-INF-файлы — без этого сборка падает.
+            excludes += [
+                    'META-INF/versions/9/OSGI-INF/MANIFEST.MF',
+                    'META-INF/AL2.0',
+                    'META-INF/LGPL2.1',
+                    'META-INF/*.kotlin_module',
+                    'META-INF/DEPENDENCIES',
+                    'META-INF/LICENSE*',
+                    'META-INF/NOTICE*'
+            ]
+        }
     }
 }
 
