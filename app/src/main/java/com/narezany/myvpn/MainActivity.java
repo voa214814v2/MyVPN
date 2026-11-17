@@ -27,6 +27,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -52,8 +53,10 @@ public class MainActivity extends Activity {
     private static final String KEY_MODE = "mode";
     private static final String KEY_WARP = "warp_conf";
     private static final String KEY_CUSTOM = "custom_conf";
+    private static final String KEY_VLESS = "vless_conf";
     private static final String MODE_WARP = "warp";
     private static final String MODE_CUSTOM = "custom";
+    private static final String MODE_VLESS = "vless";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -76,6 +79,7 @@ public class MainActivity extends Activity {
     private TextView miniLog;
     private TextView warpChip;
     private TextView customChip;
+    private TextView vlessChip;
 
     private KeyClickerView keyView;
     private TextView keysCount;
@@ -140,6 +144,7 @@ public class MainActivity extends Activity {
         miniLog = findViewById(R.id.mini_log);
         warpChip = findViewById(R.id.mode_warp);
         customChip = findViewById(R.id.mode_custom);
+        vlessChip = findViewById(R.id.mode_vless);
 
         keyView = findViewById(R.id.key_view);
         keysCount = findViewById(R.id.keys_count);
@@ -165,6 +170,7 @@ public class MainActivity extends Activity {
 
         warpChip.setOnClickListener(v -> selectMode(MODE_WARP));
         customChip.setOnClickListener(v -> showConfigDialog());
+        vlessChip.setOnClickListener(v -> showVlessDialog());
 
         tabVpn.setOnClickListener(v -> showTab(TAB_VPN));
         tabThemes.setOnClickListener(v -> showTab(TAB_THEMES));
@@ -407,23 +413,16 @@ public class MainActivity extends Activity {
     }
 
     private void startTunnel() {
+        if (MODE_VLESS.equals(mode())) {
+            startVlessTunnel();
+            return;
+        }
         setBusy(true, R.string.status_connecting);
         io.execute(() -> {
             try {
                 final String conf = ensureConfig();
                 final Config config = Config.parse(new BufferedReader(new StringReader(conf)));
-                VpnManager.get(getApplicationContext()).connect(config, (ok, error) -> ui.post(() -> {
-                    setBusy(false, 0);
-                    if (ok) {
-                        startKeepAlive();
-                        log(getString(R.string.log_connected));
-                        ui.removeCallbacks(statsTicker);
-                        ui.post(statsTicker);
-                    } else {
-                        log(getString(R.string.log_error) + " " + error);
-                    }
-                    refreshUi();
-                }));
+                VpnManager.get(getApplicationContext()).connect(config, this::onTunnelDone);
             } catch (final Exception e) {
                 ui.post(() -> {
                     setBusy(false, 0);
@@ -431,6 +430,34 @@ public class MainActivity extends Activity {
                     refreshUi();
                 });
             }
+        });
+    }
+
+    private void startVlessTunnel() {
+        final String text = prefs.getString(KEY_VLESS, "");
+        if (text.trim().isEmpty()) {
+            setBusy(false, 0);
+            log(getString(R.string.log_error) + " " + getString(R.string.err_no_servers));
+            showVlessDialog();
+            return;
+        }
+        // Несколько ссылок — сначала проверяем, какая отвечает.
+        setBusy(true, text.contains("\n") ? R.string.status_testing : R.string.status_connecting);
+        VpnManager.get(getApplicationContext()).connectVless(text, this::onTunnelDone);
+    }
+
+    private void onTunnelDone(final boolean ok, final String error) {
+        ui.post(() -> {
+            setBusy(false, 0);
+            if (ok) {
+                startKeepAlive();
+                log(getString(R.string.log_connected));
+                ui.removeCallbacks(statsTicker);
+                ui.post(statsTicker);
+            } else {
+                log(getString(R.string.log_error) + " " + error);
+            }
+            refreshUi();
         });
     }
 
@@ -476,6 +503,10 @@ public class MainActivity extends Activity {
         refreshUi();
     }
 
+    private String mode() {
+        return prefs.getString(KEY_MODE, MODE_WARP);
+    }
+
     // ---------- конфиг ----------
 
     private void showConfigDialog() {
@@ -514,6 +545,76 @@ public class MainActivity extends Activity {
         prefs.edit().putString(KEY_CUSTOM, text).putString(KEY_MODE, MODE_CUSTOM).apply();
         log(getString(R.string.log_config_saved));
         refreshUi();
+    }
+
+    // ---------- VLESS ----------
+
+    private void showVlessDialog() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setGravity(Gravity.TOP | Gravity.START);
+        input.setTypeface(Typeface.MONOSPACE);
+        input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        input.setMinLines(7);
+        input.setText(prefs.getString(KEY_VLESS, ""));
+        input.setHint(R.string.config_vless_hint);
+
+        final TextView note = new TextView(this);
+        note.setText(R.string.config_vless_note);
+        note.setTextColor(getColor(R.color.muted));
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        note.setLineSpacing(Theme.dp(this, 2), 1f);
+        note.setPadding(0, Theme.dp(this, 10), 0, 0);
+
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        final int pad = Theme.dp(this, 16);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(input);
+        box.addView(note);
+
+        final ScrollView scroll = new ScrollView(this);
+        scroll.addView(box);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.config_vless_title)
+                .setView(scroll)
+                .setPositiveButton(R.string.save,
+                        (dialog, which) -> saveVlessConfig(input.getText().toString()))
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void saveVlessConfig(final String text) {
+        final String trimmed = text.trim();
+        // Разбор ссылок делает ядро Xray — это долго, поэтому не в главном потоке.
+        io.execute(() -> {
+            int count = 0;
+            String failure = null;
+            try {
+                count = VlessTunnel.countServers(trimmed);
+            } catch (final Throwable e) {
+                for (final String line : trimmed.split("\n")) {
+                    if (line.trim().startsWith("vless://")) count++;
+                }
+                if (count == 0) failure = describe(e);
+            }
+
+            final int total = count;
+            final String error = failure;
+            ui.post(() -> {
+                if (total == 0) {
+                    log(getString(R.string.log_bad_vless) + " "
+                            + (error == null ? getString(R.string.err_no_servers) : error));
+                    return;
+                }
+                prefs.edit().putString(KEY_VLESS, trimmed).putString(KEY_MODE, MODE_VLESS).apply();
+                log(getString(R.string.log_vless_saved, total));
+                refreshUi();
+            });
+        });
     }
 
     // ---------- обновления ----------
@@ -620,11 +721,16 @@ public class MainActivity extends Activity {
     private void refreshUi() {
         final int accent = Theme.accent(this);
         final boolean up = VpnManager.get(getApplicationContext()).isUp();
-        final boolean warp = !MODE_CUSTOM.equals(prefs.getString(KEY_MODE, MODE_WARP));
+        final String mode = mode();
+        final boolean warp = MODE_WARP.equals(mode);
+        final boolean custom = MODE_CUSTOM.equals(mode);
+        final boolean vless = !warp && !custom;
 
-        sourceView.setText(warp ? R.string.source_warp : R.string.source_custom);
+        sourceView.setText(warp ? R.string.source_warp
+                : custom ? R.string.source_custom : R.string.source_vless);
         warpChip.setBackground(Theme.chip(this, warp, accent));
-        customChip.setBackground(Theme.chip(this, !warp, accent));
+        customChip.setBackground(Theme.chip(this, custom, accent));
+        vlessChip.setBackground(Theme.chip(this, vless, accent));
         updateBanner.setBackground(Theme.banner(this, accent));
 
         if (busy) {
@@ -720,7 +826,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static String describe(final Exception e) {
+    private static String describe(final Throwable e) {
         final String message = e.getMessage();
         return message == null || message.isEmpty() ? e.getClass().getSimpleName() : message;
     }

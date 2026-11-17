@@ -167,7 +167,7 @@
                     android:id="@+id/mode_warp"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="6dp"
+                    android:layout_marginEnd="4dp"
                     android:layout_weight="1"
                     android:background="@drawable/bg_chip_on"
                     android:clickable="true"
@@ -183,7 +183,8 @@
                     android:id="@+id/mode_custom"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
                     android:layout_weight="1"
                     android:background="@drawable/bg_chip"
                     android:clickable="true"
@@ -192,6 +193,22 @@
                     android:paddingTop="11dp"
                     android:paddingBottom="11dp"
                     android:text="@string/mode_custom"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/mode_vless"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingTop="11dp"
+                    android:paddingBottom="11dp"
+                    android:text="@string/mode_vless"
                     android:textColor="@color/text"
                     android:textSize="14sp" />
             </LinearLayout>

@@ -4,11 +4,13 @@
 
     <string name="source_warp">Источник: WARP (бесплатно)</string>
     <string name="source_custom">Источник: свой конфиг</string>
+    <string name="source_vless">Источник: VLESS (бесплатные серверы)</string>
 
     <string name="status_off">Отключено</string>
     <string name="status_on">Подключено</string>
     <string name="status_working">Секунду…</string>
     <string name="status_connecting">Подключаюсь…</string>
+    <string name="status_testing">Проверяю серверы…</string>
     <string name="status_disconnecting">Отключаюсь…</string>
 
     <string name="btn_on">ВКЛ</string>
@@ -19,6 +21,7 @@
 
     <string name="mode_warp">WARP</string>
     <string name="mode_custom">Конфиг</string>
+    <string name="mode_vless">VLESS</string>
 
     <string name="theme_title">Темы</string>
     <string name="theme_subtitle">Цвет акцента</string>
@@ -37,6 +40,9 @@
 
     <string name="config_title">Конфиг WireGuard / AmneziaWG</string>
     <string name="config_hint">[Interface]\nPrivateKey = …\nJc = 4\nJmin = 40\n…</string>
+    <string name="config_vless_title">Серверы VLESS</string>
+    <string name="config_vless_hint">vless://…@server:443?security=reality&amp;pbk=…#название</string>
+    <string name="config_vless_note">Вставь одну ссылку vless:// или сразу список — приложение проверит серверы и подключится к тому, что отвечает.</string>
     <string name="save">Сохранить</string>
     <string name="cancel">Отмена</string>
 
@@ -48,8 +54,16 @@
     <string name="log_bad_config">Конфиг не подошёл:</string>
     <string name="log_registering">Регистрируюсь в WARP…</string>
     <string name="log_app_start">Приложение запущено</string>
+    <string name="log_vless_saved">Серверы VLESS сохранены: %1$d</string>
+    <string name="log_bad_vless">Ссылка VLESS не подошла:</string>
+    <string name="log_vless_server">VLESS-сервер: %1$s (%2$d мс)</string>
+    <string name="log_vless_server_one">VLESS-сервер: %1$s</string>
 
     <string name="err_no_config">сначала вставь конфиг</string>
+    <string name="err_no_servers">сначала вставь ссылку vless://</string>
+    <string name="err_no_working">ни один из %1$d серверов не ответил — попробуй другой список</string>
+    <string name="err_no_tun">не удалось поднять VPN-интерфейс</string>
+    <string name="err_xray_dead">ядро VLESS не запустилось</string>
 
     <string name="notif_channel">Состояние VPN</string>
     <string name="notif_title">VPN подключён</string>
