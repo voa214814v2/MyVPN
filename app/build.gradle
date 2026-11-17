@@ -77,6 +77,9 @@ dependencies {
     // AmneziaWG: понимает и обычный WireGuard, и обфусцированные конфиги (Jc/Jmin/Jmax/S1/S2/H1..H4).
     // Оттуда же hev-socks5-tunnel — он превращает tun в SOCKS5 для режима VLESS.
     implementation 'com.zaneschepke:amneziawg-android:2.3.7'
+    // hev-socks5-tunnel (org.amnezia.awg.hevtunnel) приходит из amneziawg только в рантайме,
+    // поэтому для компиляции подключаем его явно.
+    implementation 'com.zaneschepke:hevtunnel:1.0.1'
     implementation 'androidx.core:core:1.16.0'
     // Ядро Xray: единственное, что умеет VLESS/Reality. Лежит в репозитории,
     // потому что x86-библиотеки из него вырезаны (24 МБ вместо 53 МБ).
