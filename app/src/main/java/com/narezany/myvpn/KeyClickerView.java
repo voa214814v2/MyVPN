@@ -34,12 +34,15 @@ public class KeyClickerView extends View {
     private final Paint keyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint particlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint badgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final List<Particle> particles = new ArrayList<>();
     private final Random random = new Random();
 
     private int accent = 0xFF7C5CFF;
     private boolean connected;
+    private int multiplier = 1;
+    private float celebrate;
     private float rotation;
     private float pulse;
     private float scale = 1f;
@@ -73,6 +76,22 @@ public class KeyClickerView extends View {
         keyPaint.setTypeface(Typeface.DEFAULT);
         particlePaint.setStyle(Paint.Style.FILL);
         dotPaint.setStyle(Paint.Style.FILL);
+        badgePaint.setTextAlign(Paint.Align.CENTER);
+        badgePaint.setTypeface(Typeface.DEFAULT_BOLD);
+    }
+
+    /** Множитель кликера: ускоряет кольца и показывает бейдж xN. */
+    public void setMultiplier(final int value) {
+        if (multiplier == value) return;
+        multiplier = Math.max(1, value);
+        invalidate();
+    }
+
+    /** Вспышка и дополнительные частицы при новом уровне. */
+    public void celebrate() {
+        celebrate = 1f;
+        spawnParticles(26, 0xFFFFFFFF);
+        invalidate();
     }
 
     public void setAccent(final int color) {
@@ -150,8 +169,9 @@ public class KeyClickerView extends View {
         final float dt = lastFrame == 0 ? 0.016f : Math.min(0.05f, (now - lastFrame) / 1000f);
         lastFrame = now;
 
-        rotation = (rotation + dt * 24f) % 360f;
-        pulse += dt * 2.4f;
+        rotation = (rotation + dt * (24f + multiplier * 3f)) % 360f;
+        pulse += dt * (2.4f + multiplier * 0.2f);
+        celebrate = Math.max(0f, celebrate - dt * 1.6f);
         scale += (targetScale - scale) * Math.min(1f, dt * 20f);
         updateParticles(dt);
 
@@ -168,8 +188,8 @@ public class KeyClickerView extends View {
 
         // Мягкое свечение
         glowPaint.setShader(glowShader);
-        glowPaint.setAlpha((int) (150 + 70 * Math.sin(pulse)));
-        canvas.drawCircle(0f, 0f, radius * 1.08f, glowPaint);
+        glowPaint.setAlpha((int) Math.min(255, 150 + 70 * Math.sin(pulse) + celebrate * 70));
+        canvas.drawCircle(0f, 0f, radius * (1.08f + celebrate * 0.12f), glowPaint);
 
         // Внешнее пунктирное кольцо
         ringPaint.setShader(null);
@@ -191,6 +211,17 @@ public class KeyClickerView extends View {
         canvas.drawCircle(0f, 0f, radius * 0.76f, ringPaint2);
         canvas.restore();
 
+        // Третье кольцо появляется, когда включён буст или множитель.
+        if (multiplier > 1) {
+            ringPaint.setStrokeWidth(dp(2.5f));
+            ringPaint.setColor(withAlpha(tint, 180));
+            ringPaint.setPathEffect(new DashPathEffect(new float[]{dp(3), dp(11)}, 0));
+            canvas.save();
+            canvas.rotate(rotation * 2.2f);
+            canvas.drawCircle(0f, 0f, radius * 0.84f, ringPaint);
+            canvas.restore();
+        }
+
         // Тело ключа
         bodyPaint.setShader(bodyShader);
         canvas.drawCircle(0f, 0f, radius * 0.62f, bodyPaint);
@@ -203,6 +234,19 @@ public class KeyClickerView extends View {
         keyPaint.setColor(0xFFFFFFFF);
         final Paint.FontMetrics metrics = keyPaint.getFontMetrics();
         canvas.drawText("🔑", 0f, -(metrics.ascent + metrics.descent) / 2f, keyPaint);
+
+        // Бейдж текущего множителя.
+        if (multiplier > 1) {
+            final float bx = radius * 0.52f;
+            final float by = -radius * 0.55f;
+            badgePaint.setColor(withAlpha(0xFF000000, 190));
+            canvas.drawCircle(bx, by, radius * 0.17f, badgePaint);
+            badgePaint.setColor(0xFFFFFFFF);
+            badgePaint.setTextSize(radius * 0.15f);
+            final Paint.FontMetrics badgeMetrics = badgePaint.getFontMetrics();
+            canvas.drawText("x" + multiplier, bx,
+                    by - (badgeMetrics.ascent + badgeMetrics.descent) / 2f, badgePaint);
+        }
 
         // Зелёная точка, когда туннель поднят
         if (connected) {
@@ -255,10 +299,14 @@ public class KeyClickerView extends View {
     }
 
     private void spawnParticles() {
+        spawnParticles(16 + Math.min(24, multiplier * 3), 0);
+    }
+
+    private void spawnParticles(final int count, final int forcedColor) {
         final int tint = connected ? CONNECTED_COLOR : accent;
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < count; i++) {
             final double angle = random.nextDouble() * Math.PI * 2;
-            final float speed = dp(60) + random.nextFloat() * dp(150);
+            final float speed = dp(60) + random.nextFloat() * (dp(150) + multiplier * dp(12));
             final Particle particle = new Particle();
             particle.x = 0f;
             particle.y = 0f;
@@ -267,7 +315,8 @@ public class KeyClickerView extends View {
             particle.maxLife = 0.5f + random.nextFloat() * 0.35f;
             particle.life = particle.maxLife;
             particle.size = dp(2) + random.nextFloat() * dp(3);
-            particle.color = i % 3 == 0 ? 0xFFFFFFFF : tint;
+            particle.color = forcedColor != 0 ? forcedColor
+                    : (i % 3 == 0 ? 0xFFFFFFFF : tint);
             particles.add(particle);
         }
     }

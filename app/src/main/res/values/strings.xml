@@ -74,7 +74,47 @@
     <string name="keys_count">🔑 %1$d</string>
     <string name="keys_level">Уровень %1$d · %2$s</string>
     <string name="keys_progress">%1$d / %2$d до уровня %3$d</string>
+    <string name="keys_total">Всего %1$d · %2$s</string>
     <string name="btn_disconnect">Отключить</string>
+
+    <string name="boost_small">⚡x2 30с\n%1$d 🔑</string>
+    <string name="boost_big">🔥x3 60с\n%1$d 🔑</string>
+    <string name="boost_mega">💥x5 20с\n%1$d 🔑</string>
+    <string name="boost_none">Бустов нет · множитель x%1$d</string>
+    <string name="boost_active">Буст x%1$d · %2$d с · общий x%3$d</string>
+    <string name="upgrade_mult">✖ Множитель x%1$d\n%2$d 🔑</string>
+    <string name="upgrade_auto">🤖 +%1$d/сек\n%2$d 🔑</string>
+    <string name="boost_bought">Буст x%1$d на %2$d секунд!</string>
+    <string name="boost_no_keys">Не хватает ключей</string>
+    <string name="upgrade_bought">Улучшение куплено</string>
+    <string name="fly_key">+%1$d 🔑</string>
+    <string name="vpn_bonus">VPN включён · бонус x2</string>
+
+    <string name="menu_config_title">Выбери конфиг</string>
+    <string name="menu_warp">⚙ WARP (автоматически)</string>
+    <string name="menu_add_config">＋ Вставить конфиг</string>
+    <string name="menu_file_config">📁 Взять из файла</string>
+    <string name="menu_delete_hint">Долгое нажатие — удалить конфиг</string>
+    <string name="config_saved_as">Конфиг «%1$s» выбран</string>
+    <string name="config_deleted">Конфиг удалён</string>
+    <string name="config_name">Конфиг %1$d</string>
+    <string name="config_import_error">Не удалось прочитать файл</string>
+
+    <string name="menu_vless_title">Выбери VLESS-сервер</string>
+    <string name="menu_vless_auto">⚡ Автовыбор (%1$d серверов)</string>
+    <string name="menu_vless_refresh">🔄 Обновить список</string>
+    <string name="menu_vless_paste">✍ Вставить ссылку / подписку</string>
+    <string name="menu_vless_file">📁 Взять из файла</string>
+    <string name="menu_vless_updating">Обновляю список…</string>
+    <string name="menu_vless_hint">Нажми — выбрать, долгое нажатие — проверить</string>
+    <string name="vless_server_ok">%1$s — %2$d мс</string>
+    <string name="vless_server_bad">%1$s — не отвечает</string>
+    <string name="vless_chosen">Сервер: %1$s</string>
+    <string name="vless_catalog_error">Список не обновлён: %1$s</string>
+    <string name="vless_catalog_updated">Свежих серверов: %1$d</string>
+    <string name="mode_vless_count">VLESS · %1$d</string>
+    <string name="mode_custom_count">Конфиг · %1$d</string>
+    <string name="source_vless_count">Источник: VLESS (%1$d серверов)</string>
 
     <string name="update_ready">⬆ Обновление %1$s — нажми, чтобы поставить</string>
     <string name="update_downloading">⬇ Скачиваю обновление…</string>

@@ -13,6 +13,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,9 +24,12 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -34,7 +38,13 @@ import android.widget.Toast;
 import org.amnezia.awg.config.Config;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,6 +53,8 @@ public class MainActivity extends Activity {
 
     private static final int REQ_VPN = 1001;
     private static final int REQ_NOTIFICATIONS = 1002;
+    private static final int REQ_IMPORT_VLESS = 1003;
+    private static final int REQ_IMPORT_CONF = 1004;
 
     private static final int TAB_VPN = 0;
     private static final int TAB_THEMES = 1;
@@ -81,11 +93,18 @@ public class MainActivity extends Activity {
     private TextView customChip;
     private TextView vlessChip;
 
+    private FrameLayout keyContainer;
     private KeyClickerView keyView;
     private TextView keysCount;
     private TextView keysLevel;
     private TextView keysProgressText;
     private ProgressBar keysProgress;
+    private TextView boostStatus;
+    private TextView boostSmall;
+    private TextView boostBig;
+    private TextView boostMega;
+    private TextView upgradeMult;
+    private TextView upgradeAuto;
     private TextView disconnectView;
 
     private TextView updateBanner;
@@ -109,6 +128,29 @@ public class MainActivity extends Activity {
     private boolean updateChecked;
     private int loggedUpdateCode;
 
+    private int serverCount;
+    private AlertDialog vlessMenuDialog;
+    private ArrayAdapter<String> vlessAdapter;
+    private final List<String> vlessLabels = new ArrayList<>();
+    private final List<String> vlessLinks = new ArrayList<>();
+    private final List<String> vlessStatuses = new ArrayList<>();
+    private TextView vlessMenuHint;
+
+    private final Runnable autoTicker = new Runnable() {
+        @Override
+        public void run() {
+            final Clicker.Tap tap = Clicker.tick(MainActivity.this);
+            updateClicker(false);
+            if (tap.levelUp) {
+                keyView.celebrate();
+                final String line = getString(R.string.log_level_up, tap.level, Clicker.rank(tap.level));
+                Toast.makeText(MainActivity.this, line, Toast.LENGTH_SHORT).show();
+                log(line);
+            }
+            ui.postDelayed(this, 1000);
+        }
+    };
+
     private final Runnable statsTicker = new Runnable() {
         @Override
         public void run() {
@@ -127,6 +169,8 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         lastAccent = Theme.accent(this);
         lastClicks = Clicker.clicks(this);
+        serverCount = ServerCatalog.servers(this).size();
+        migrateOldConfig();
 
         panelVpn = findViewById(R.id.panel_vpn);
         panelThemes = findViewById(R.id.panel_themes);
@@ -146,11 +190,18 @@ public class MainActivity extends Activity {
         customChip = findViewById(R.id.mode_custom);
         vlessChip = findViewById(R.id.mode_vless);
 
+        keyContainer = findViewById(R.id.key_container);
         keyView = findViewById(R.id.key_view);
         keysCount = findViewById(R.id.keys_count);
         keysLevel = findViewById(R.id.keys_level);
         keysProgressText = findViewById(R.id.keys_progress_text);
         keysProgress = findViewById(R.id.keys_progress);
+        boostStatus = findViewById(R.id.boost_status);
+        boostSmall = findViewById(R.id.boost_small);
+        boostBig = findViewById(R.id.boost_big);
+        boostMega = findViewById(R.id.boost_mega);
+        upgradeMult = findViewById(R.id.upgrade_mult);
+        upgradeAuto = findViewById(R.id.upgrade_auto);
         disconnectView = findViewById(R.id.disconnect);
 
         updateBanner = findViewById(R.id.update_banner);
@@ -162,24 +213,30 @@ public class MainActivity extends Activity {
         helpContainer = findViewById(R.id.help_container);
 
         keyView.setOnClickListener(v -> onKeyTap());
-        disconnectView.setOnClickListener(v -> {
+        setPressed(disconnectView, () -> {
             if (!busy) stopTunnel();
         });
-        updateBanner.setOnClickListener(v -> onUpdateBannerClick());
-        versionRow.setOnClickListener(v -> checkUpdates(true));
+        setPressed(updateBanner, this::onUpdateBannerClick);
+        setPressed(versionRow, () -> checkUpdates(true));
 
-        warpChip.setOnClickListener(v -> selectMode(MODE_WARP));
-        customChip.setOnClickListener(v -> showConfigDialog());
-        vlessChip.setOnClickListener(v -> showVlessDialog());
+        setPressed(warpChip, () -> selectMode(MODE_WARP));
+        setPressed(customChip, this::showConfigMenu);
+        setPressed(vlessChip, this::showVlessMenu);
 
-        tabVpn.setOnClickListener(v -> showTab(TAB_VPN));
-        tabThemes.setOnClickListener(v -> showTab(TAB_THEMES));
-        tabLogs.setOnClickListener(v -> showTab(TAB_LOGS));
-        tabHelp.setOnClickListener(v -> showTab(TAB_HELP));
+        setPressed(boostSmall, () -> buyBoost(Clicker.BOOST_SMALL));
+        setPressed(boostBig, () -> buyBoost(Clicker.BOOST_BIG));
+        setPressed(boostMega, () -> buyBoost(Clicker.BOOST_MEGA));
+        setPressed(upgradeMult, this::buyMultiplier);
+        setPressed(upgradeAuto, this::buyAuto);
 
-        findViewById(R.id.logs_refresh).setOnClickListener(v -> refreshLogs());
-        findViewById(R.id.logs_copy).setOnClickListener(v -> copyLogs());
-        findViewById(R.id.logs_clear).setOnClickListener(v -> {
+        setPressed(tabVpn, () -> showTab(TAB_VPN));
+        setPressed(tabThemes, () -> showTab(TAB_THEMES));
+        setPressed(tabLogs, () -> showTab(TAB_LOGS));
+        setPressed(tabHelp, () -> showTab(TAB_HELP));
+
+        setPressed(findViewById(R.id.logs_refresh), this::refreshLogs);
+        setPressed(findViewById(R.id.logs_copy), this::copyLogs);
+        setPressed(findViewById(R.id.logs_clear), () -> {
             Logs.clear(this);
             refreshLogs();
             Toast.makeText(this, R.string.logs_cleared, Toast.LENGTH_SHORT).show();
@@ -199,6 +256,8 @@ public class MainActivity extends Activity {
         refreshUi();
         ui.removeCallbacks(statsTicker);
         ui.post(statsTicker);
+        ui.removeCallbacks(autoTicker);
+        ui.post(autoTicker);
         if (!updateChecked) {
             updateChecked = true;
             ui.postDelayed(() -> checkUpdates(false), 1500);
@@ -209,12 +268,14 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         ui.removeCallbacks(statsTicker);
+        ui.removeCallbacks(autoTicker);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         ui.removeCallbacksAndMessages(null);
+        if (vlessMenuDialog != null && vlessMenuDialog.isShowing()) vlessMenuDialog.dismiss();
         io.shutdownNow();
     }
 
@@ -226,6 +287,20 @@ public class MainActivity extends Activity {
                 startTunnel();
             } else {
                 log(getString(R.string.log_vpn_denied));
+            }
+            return;
+        }
+        if (requestCode == REQ_IMPORT_VLESS || requestCode == REQ_IMPORT_CONF) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+            final String text = readFile(data.getData());
+            if (text == null || text.trim().isEmpty()) {
+                Toast.makeText(this, R.string.config_import_error, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (requestCode == REQ_IMPORT_VLESS) {
+                importVlessFile(text);
+            } else {
+                importConfigFile(text);
             }
         }
     }
@@ -359,14 +434,14 @@ public class MainActivity extends Activity {
     // ---------- кликер ----------
 
     private void onKeyTap() {
-        final int clicks = Clicker.add(this);
-        final int oldLevel = Clicker.level(lastClicks);
-        final int newLevel = Clicker.level(clicks);
-        lastClicks = clicks;
-        updateClicker(clicks, true);
+        final Clicker.Tap tap = Clicker.add(this, 1);
+        lastClicks = tap.total;
+        updateClicker(true);
+        showFlyingKeys(tap.gained);
 
-        if (newLevel > oldLevel) {
-            final String line = getString(R.string.log_level_up, newLevel, Clicker.rank(newLevel));
+        if (tap.levelUp) {
+            keyView.celebrate();
+            final String line = getString(R.string.log_level_up, tap.level, Clicker.rank(tap.level));
             Toast.makeText(this, line, Toast.LENGTH_SHORT).show();
             log(line);
         }
@@ -376,16 +451,51 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void updateClicker(final int clicks, final boolean bounce) {
-        final int level = Clicker.level(clicks);
-        final int inLevel = Clicker.inLevel(clicks);
-        keysCount.setText(getString(R.string.keys_count, clicks));
-        keysLevel.setText(getString(R.string.keys_level, level, Clicker.rank(level)));
+    private void updateClicker(final boolean bounce) {
+        final int total = Clicker.clicks(this);
+        final int level = Clicker.level(total);
+        final int inLevel = Clicker.inLevel(total);
+        final int accent = Theme.accent(this);
+
+        keysCount.setText(getString(R.string.keys_count, Clicker.balance(this)));
+        keysLevel.setText(getString(R.string.keys_total, total,
+                getString(R.string.keys_level, level, Clicker.rank(level))));
         keysProgress.setMax(Clicker.PER_LEVEL);
         keysProgress.setProgress(inLevel);
         keysProgressText.setText(getString(
                 R.string.keys_progress, inLevel, Clicker.PER_LEVEL, level + 1));
-        keysProgress.getProgressDrawable().setTint(Theme.accent(this));
+        keysProgress.getProgressDrawable().setTint(accent);
+
+        final int left = Clicker.boostSecondsLeft(this);
+        String status = left > 0
+                ? getString(R.string.boost_active, Clicker.boostMultiplier(this),
+                        left, Clicker.multiplier(this))
+                : getString(R.string.boost_none, Clicker.multiplier(this));
+        if (Clicker.vpnBonus(this)) {
+            status += " · " + getString(R.string.vpn_bonus);
+        }
+        boostStatus.setText(status);
+
+        boostSmall.setText(getString(R.string.boost_small, Clicker.priceBoost(Clicker.BOOST_SMALL)));
+        boostBig.setText(getString(R.string.boost_big, Clicker.priceBoost(Clicker.BOOST_BIG)));
+        boostMega.setText(getString(R.string.boost_mega, Clicker.priceBoost(Clicker.BOOST_MEGA)));
+        upgradeMult.setText(getString(R.string.upgrade_mult,
+                Clicker.baseMultiplier(this), Clicker.priceMultiplier(this)));
+        upgradeAuto.setText(getString(R.string.upgrade_auto,
+                Clicker.autoPerSecond(this), Clicker.priceAuto(this)));
+
+        boostSmall.setBackground(Theme.chip(this,
+                Clicker.balance(this) >= Clicker.priceBoost(Clicker.BOOST_SMALL), accent));
+        boostBig.setBackground(Theme.chip(this,
+                Clicker.balance(this) >= Clicker.priceBoost(Clicker.BOOST_BIG), accent));
+        boostMega.setBackground(Theme.chip(this,
+                Clicker.balance(this) >= Clicker.priceBoost(Clicker.BOOST_MEGA), accent));
+        upgradeMult.setBackground(Theme.chip(this,
+                Clicker.balance(this) >= Clicker.priceMultiplier(this), accent));
+        upgradeAuto.setBackground(Theme.chip(this,
+                Clicker.balance(this) >= Clicker.priceAuto(this), accent));
+
+        keyView.setMultiplier(Clicker.multiplier(this));
 
         if (bounce) {
             keysCount.animate().cancel();
@@ -394,6 +504,65 @@ public class MainActivity extends Activity {
             keysCount.animate().scaleX(1f).scaleY(1f).setDuration(220)
                     .setInterpolator(new DecelerateInterpolator()).start();
         }
+    }
+
+    private void showFlyingKeys(final int gained) {
+        final TextView fly = new TextView(this);
+        fly.setText(getString(R.string.fly_key, gained));
+        fly.setTextColor(Theme.accent(this));
+        fly.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        fly.setTypeface(null, Typeface.BOLD);
+        final FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        params.gravity = Gravity.CENTER;
+        fly.setLayoutParams(params);
+        keyContainer.addView(fly);
+        fly.animate().translationY(-Theme.dp(this, 80)).alpha(0f)
+                .setDuration(750).setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> keyContainer.removeView(fly)).start();
+    }
+
+    private void buyBoost(final int kind) {
+        if (Clicker.buyBoost(this, kind)) {
+            keyView.celebrate();
+            Toast.makeText(this,
+                    getString(R.string.boost_bought, kind, Clicker.boostDuration(kind)),
+                    Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, R.string.boost_no_keys, Toast.LENGTH_SHORT).show();
+        }
+        updateClicker(true);
+    }
+
+    private void buyMultiplier() {
+        if (Clicker.buyMultiplier(this)) {
+            keyView.celebrate();
+            Toast.makeText(this, R.string.upgrade_bought, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, R.string.boost_no_keys, Toast.LENGTH_SHORT).show();
+        }
+        updateClicker(true);
+    }
+
+    private void buyAuto() {
+        if (Clicker.buyAuto(this)) {
+            Toast.makeText(this, R.string.upgrade_bought, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, R.string.boost_no_keys, Toast.LENGTH_SHORT).show();
+        }
+        updateClicker(true);
+    }
+
+    /** Небольшая пружинка при нажатии на любую кнопку-плашку. */
+    private void setPressed(final View view, final Runnable action) {
+        view.setOnClickListener(v -> {
+            v.animate().cancel();
+            v.setScaleX(0.94f);
+            v.setScaleY(0.94f);
+            v.animate().scaleX(1f).scaleY(1f).setDuration(180)
+                    .setInterpolator(new DecelerateInterpolator()).start();
+            action.run();
+        });
     }
 
     // ---------- туннель ----------
@@ -499,6 +668,8 @@ public class MainActivity extends Activity {
     }
 
     private void selectMode(final String mode) {
+        if (mode().equals(mode)) return;
+        if (!busy && VpnManager.get(getApplicationContext()).isUp()) stopTunnel();
         prefs.edit().putString(KEY_MODE, mode).apply();
         refreshUi();
     }
@@ -508,6 +679,49 @@ public class MainActivity extends Activity {
     }
 
     // ---------- конфиг ----------
+
+    /** Конфиг из старых версий переносим в библиотеку, чтобы он не потерялся. */
+    private void migrateOldConfig() {
+        final String old = prefs.getString(KEY_CUSTOM, "");
+        if (!old.trim().isEmpty() && ConfigLibrary.all(this).isEmpty()) {
+            ConfigLibrary.add(this, "Мой конфиг", old);
+        }
+    }
+
+    private void showConfigMenu() {
+        final List<ConfigLibrary.Entry> entries = ConfigLibrary.all(this);
+        final List<String> labels = new ArrayList<>();
+        labels.add(getString(R.string.menu_warp));
+        labels.add(getString(R.string.menu_add_config));
+        labels.add(getString(R.string.menu_file_config));
+        for (final ConfigLibrary.Entry entry : entries) {
+            labels.add("🔹 " + entry.name);
+        }
+
+        showListMenu(getString(R.string.menu_config_title), labels,
+                getString(R.string.menu_delete_hint), 0, null,
+                (parent, view, position, id) -> {
+                    if (position == 0) {
+                        selectMode(MODE_WARP);
+                        Toast.makeText(this, R.string.menu_warp, Toast.LENGTH_SHORT).show();
+                    } else if (position == 1) {
+                        showConfigDialog();
+                    } else if (position == 2) {
+                        pickFile(REQ_IMPORT_CONF);
+                    } else if (position - 3 < entries.size()) {
+                        final ConfigLibrary.Entry entry = entries.get(position - 3);
+                        saveCustomConfig(entry.text, entry.name);
+                    }
+                },
+                (parent, view, position, id) -> {
+                    if (position >= 3 && position - 3 < entries.size()) {
+                        ConfigLibrary.remove(this, position - 3);
+                        Toast.makeText(this, R.string.config_deleted, Toast.LENGTH_SHORT).show();
+                        showConfigMenu();
+                    }
+                    return true;
+                });
+    }
 
     private void showConfigDialog() {
         final EditText input = new EditText(this);
@@ -530,24 +744,181 @@ public class MainActivity extends Activity {
                 .setTitle(R.string.config_title)
                 .setView(container)
                 .setPositiveButton(R.string.save,
-                        (dialog, which) -> saveCustomConfig(input.getText().toString()))
+                        (dialog, which) -> saveCustomConfig(input.getText().toString(), null))
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
-    private void saveCustomConfig(final String text) {
+    private void saveCustomConfig(final String text, final String name) {
+        String config;
         try {
-            Config.parse(new BufferedReader(new StringReader(text)));
+            config = text.trim();
+            Config.parse(new BufferedReader(new StringReader(config)));
         } catch (final Exception e) {
             log(getString(R.string.log_bad_config) + " " + describe(e));
             return;
         }
-        prefs.edit().putString(KEY_CUSTOM, text).putString(KEY_MODE, MODE_CUSTOM).apply();
-        log(getString(R.string.log_config_saved));
+
+        final List<ConfigLibrary.Entry> entries = ConfigLibrary.all(this);
+        String label = name;
+        boolean known = false;
+        for (final ConfigLibrary.Entry entry : entries) {
+            if (entry.text.equals(config)) {
+                label = entry.name;
+                known = true;
+                break;
+            }
+        }
+        if (!known) {
+            label = getString(R.string.config_name, entries.size() + 1);
+            ConfigLibrary.add(this, label, config);
+        }
+
+        prefs.edit().putString(KEY_CUSTOM, config).putString(KEY_MODE, MODE_CUSTOM).apply();
+        log(getString(R.string.config_saved_as, label));
         refreshUi();
     }
 
     // ---------- VLESS ----------
+
+    private void showVlessMenu() {
+        vlessLinks.clear();
+        vlessLinks.addAll(ServerCatalog.servers(this));
+        vlessStatuses.clear();
+        for (int i = 0; i < vlessLinks.size(); i++) vlessStatuses.add("");
+        fillVlessLabels();
+
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        final int pad = Theme.dp(this, 12);
+        box.setPadding(pad, pad / 2, pad, 0);
+
+        vlessMenuHint = new TextView(this);
+        vlessMenuHint.setText(R.string.menu_vless_hint);
+        vlessMenuHint.setTextColor(getColor(R.color.muted));
+        vlessMenuHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        vlessMenuHint.setPadding(0, 0, 0, Theme.dp(this, 6));
+        box.addView(vlessMenuHint);
+
+        vlessAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_list_item_1, vlessLabels);
+        final ListView list = new ListView(this);
+        list.setDividerHeight(0);
+        list.setAdapter(vlessAdapter);
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            if (position == 0) {
+                if (vlessLinks.isEmpty()) {
+                    Toast.makeText(this, R.string.err_no_servers, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                final String all = join(vlessLinks);
+                applyVless(all, getString(R.string.menu_vless_auto, vlessLinks.size()));
+            } else if (position == 1) {
+                if (vlessMenuDialog != null) vlessMenuDialog.dismiss();
+                showVlessDialog();
+                return;
+            } else if (position == 2) {
+                if (vlessMenuDialog != null) vlessMenuDialog.dismiss();
+                pickFile(REQ_IMPORT_VLESS);
+                return;
+            } else if (position - 3 < vlessLinks.size()) {
+                final String link = vlessLinks.get(position - 3);
+                applyVless(link, ServerCatalog.nameOf(link));
+            }
+            if (vlessMenuDialog != null) vlessMenuDialog.dismiss();
+        });
+        list.setOnItemLongClickListener((parent, view, position, id) -> {
+            if (position >= 3 && position - 3 < vlessLinks.size()) {
+                pingVless(position - 3);
+            }
+            return true;
+        });
+        box.addView(list, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Theme.dp(this, 320)));
+
+        vlessMenuDialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.menu_vless_title)
+                .setView(box)
+                .setNeutralButton(R.string.menu_vless_refresh, (dialog, which) -> refreshCatalog())
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void fillVlessLabels() {
+        vlessLabels.clear();
+        vlessLabels.add(getString(R.string.menu_vless_auto, vlessLinks.size()));
+        vlessLabels.add(getString(R.string.menu_vless_paste));
+        vlessLabels.add(getString(R.string.menu_vless_file));
+        for (int i = 0; i < vlessLinks.size(); i++) {
+            vlessLabels.add(serverLabel(i));
+        }
+        if (vlessAdapter != null) vlessAdapter.notifyDataSetChanged();
+    }
+
+    private String serverLabel(final int index) {
+        String label = ServerCatalog.hostOf(vlessLinks.get(index))
+                + " · " + ServerCatalog.nameOf(vlessLinks.get(index));
+        final String status = vlessStatuses.get(index);
+        if (!status.isEmpty()) label = status + " " + label;
+        return label.length() > 64 ? label.substring(0, 64) + "…" : label;
+    }
+
+    private void pingVless(final int index) {
+        final String link = vlessLinks.get(index);
+        io.execute(() -> {
+            String status;
+            String message;
+            try {
+                final long delay = VlessTunnel.ping(getApplicationContext(), link);
+                status = delay >= 0 ? "✓ " + delay + " мс" : "✖";
+                message = delay >= 0
+                        ? getString(R.string.vless_server_ok, ServerCatalog.nameOf(link), (int) delay)
+                        : getString(R.string.vless_server_bad, ServerCatalog.nameOf(link));
+            } catch (final Exception e) {
+                status = "✖";
+                message = getString(R.string.vless_server_bad, ServerCatalog.nameOf(link));
+            }
+            final String resultStatus = status;
+            final String resultMessage = message;
+            ui.post(() -> {
+                if (index < vlessStatuses.size()) {
+                    vlessStatuses.set(index, resultStatus);
+                    vlessLabels.set(index + 3, serverLabel(index));
+                    if (vlessAdapter != null) vlessAdapter.notifyDataSetChanged();
+                }
+                Toast.makeText(this, resultMessage, Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+
+    private void refreshCatalog() {
+        if (vlessMenuDialog != null && vlessMenuDialog.isShowing()) vlessMenuDialog.dismiss();
+        final TextView wait = new TextView(this);
+        wait.setText(R.string.menu_vless_updating);
+        wait.setTextColor(getColor(R.color.text));
+        wait.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        wait.setPadding(Theme.dp(this, 20), Theme.dp(this, 24),
+                Theme.dp(this, 20), Theme.dp(this, 24));
+        final AlertDialog progress = new AlertDialog.Builder(this)
+                .setTitle(R.string.menu_vless_title)
+                .setView(wait)
+                .setCancelable(false)
+                .show();
+
+        ServerCatalog.fetch(this, (text, error) -> ui.post(() -> {
+            progress.dismiss();
+            serverCount = ServerCatalog.servers(this).size();
+            if (error != null) {
+                Toast.makeText(this,
+                        getString(R.string.vless_catalog_error, error), Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this,
+                        getString(R.string.vless_catalog_updated, serverCount),
+                        Toast.LENGTH_SHORT).show();
+            }
+            showVlessMenu();
+        }));
+    }
 
     private void showVlessDialog() {
         final EditText input = new EditText(this);
@@ -610,11 +981,109 @@ public class MainActivity extends Activity {
                             + (error == null ? getString(R.string.err_no_servers) : error));
                     return;
                 }
-                prefs.edit().putString(KEY_VLESS, trimmed).putString(KEY_MODE, MODE_VLESS).apply();
+                final List<String> links = ServerCatalog.lines(trimmed);
+                final String joined = links.isEmpty() ? trimmed : join(links);
+                ServerCatalog.save(this, joined);
+                serverCount = Math.max(1, links.size());
+                applyVless(joined, getString(R.string.log_vless_saved, total));
                 log(getString(R.string.log_vless_saved, total));
-                refreshUi();
             });
         });
+    }
+
+    private void applyVless(final String text, final String label) {
+        prefs.edit().putString(KEY_VLESS, text).putString(KEY_MODE, MODE_VLESS).apply();
+        serverCount = Math.max(1, ServerCatalog.lines(text).size());
+        log(getString(R.string.vless_chosen, label));
+        refreshUi();
+    }
+
+    // ---------- меню и файлы ----------
+
+    private void showListMenu(final String title, final List<String> labels, final String hint,
+                              final int neutralRes, final Runnable neutral,
+                              final AdapterView.OnItemClickListener click,
+                              final AdapterView.OnItemLongClickListener longClick) {
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        final int pad = Theme.dp(this, 12);
+        box.setPadding(pad, pad / 2, pad, 0);
+
+        final TextView note = new TextView(this);
+        note.setText(hint);
+        note.setTextColor(getColor(R.color.muted));
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        note.setPadding(0, 0, 0, Theme.dp(this, 6));
+        box.addView(note);
+
+        final ListView list = new ListView(this);
+        list.setDividerHeight(0);
+        list.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_list_item_1, labels));
+        list.setOnItemClickListener(click);
+        if (longClick != null) list.setOnItemLongClickListener(longClick);
+        box.addView(list, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Theme.dp(this, 320)));
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(box)
+                .setNegativeButton(R.string.cancel, null);
+        if (neutralRes != 0) {
+            builder.setNeutralButton(neutralRes, (dialog, which) -> {
+                if (neutral != null) neutral.run();
+            });
+        }
+        builder.show();
+    }
+
+    private void pickFile(final int requestCode) {
+        final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(intent, requestCode);
+    }
+
+    private String readFile(final Uri uri) {
+        try (InputStream stream = getContentResolver().openInputStream(uri)) {
+            if (stream == null) return null;
+            final ByteArrayOutputStream out = new ByteArrayOutputStream();
+            final byte[] buffer = new byte[8192];
+            int read;
+            while ((read = stream.read(buffer)) > 0) out.write(buffer, 0, read);
+            return out.toString(StandardCharsets.UTF_8.name());
+        } catch (final Exception e) {
+            return null;
+        }
+    }
+
+    private void importVlessFile(final String text) {
+        final List<String> links = ServerCatalog.lines(text);
+        if (links.isEmpty()) {
+            Toast.makeText(this, R.string.err_no_servers, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final String joined = join(links);
+        ServerCatalog.save(this, joined);
+        applyVless(joined, getString(R.string.vless_catalog_updated, links.size()));
+    }
+
+    private void importConfigFile(final String text) {
+        try {
+            Config.parse(new BufferedReader(new StringReader(text.trim())));
+        } catch (final Exception e) {
+            log(getString(R.string.log_bad_config) + " " + describe(e));
+            Toast.makeText(this, R.string.log_bad_config + " " + describe(e),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        saveCustomConfig(text, null);
+    }
+
+    private static String join(final List<String> lines) {
+        final StringBuilder result = new StringBuilder();
+        for (final String line : lines) result.append(line).append('\n');
+        return result.toString().trim();
     }
 
     // ---------- обновления ----------
@@ -726,11 +1195,14 @@ public class MainActivity extends Activity {
         final boolean custom = MODE_CUSTOM.equals(mode);
         final boolean vless = !warp && !custom;
 
-        sourceView.setText(warp ? R.string.source_warp
-                : custom ? R.string.source_custom : R.string.source_vless);
+        sourceView.setText(warp ? getString(R.string.source_warp)
+                : custom ? getString(R.string.source_custom)
+                        : getString(R.string.source_vless_count, serverCount));
         warpChip.setBackground(Theme.chip(this, warp, accent));
         customChip.setBackground(Theme.chip(this, custom, accent));
         vlessChip.setBackground(Theme.chip(this, vless, accent));
+        customChip.setText(getString(R.string.mode_custom_count, ConfigLibrary.all(this).size()));
+        vlessChip.setText(getString(R.string.mode_vless_count, serverCount));
         updateBanner.setBackground(Theme.banner(this, accent));
 
         if (busy) {
@@ -750,11 +1222,12 @@ public class MainActivity extends Activity {
         }
         keyView.setConnected(up);
         keyView.setAlpha(busy ? 0.72f : 1f);
+        Clicker.setVpnBonus(this, up);
 
         disconnectView.setVisibility(up ? View.VISIBLE : View.GONE);
         disconnectView.setAlpha(busy ? 0.5f : 1f);
 
-        updateClicker(Clicker.clicks(this), false);
+        updateClicker(false);
         miniLog.setText(Logs.recent(this, 2));
         animateTabColors(accent);
         refreshStats();

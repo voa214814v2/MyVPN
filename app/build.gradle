@@ -10,8 +10,8 @@ android {
         applicationId 'com.narezany.myvpn'
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName '1.4'
+        versionCode 6
+        versionName '1.5'
 
         // Только реальные архитектуры телефонов: x86-библиотеки AmneziaWG весят лишние ~17 МБ.
         ndk {

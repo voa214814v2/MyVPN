@@ -110,6 +110,27 @@ final class VlessTunnel {
         return parse(text).size();
     }
 
+    /**
+     * Проверяет одну ссылку из меню. @return задержка в мс или -1, если сервер не ответил.
+     * Вызывать только из фонового потока.
+     */
+    static long ping(final Context context, final String link) throws Exception {
+        final List<JSONObject> servers = parse(link);
+        if (servers.isEmpty()) return -1;
+        final JSONArray configs = new JSONArray().put(new JSONObject().put("xrayJson",
+                new JSONObject().put("outbounds", new JSONArray().put(servers.get(0))).toString()));
+        final JSONObject data = invoke("pingBatch", new JSONObject()
+                .put("configs", configs)
+                .put("timeout", PING_TIMEOUT)
+                .put("url", PING_URL)).optJSONObject("data");
+        if (data == null) return -1;
+        final JSONArray results = data.optJSONArray("results");
+        if (results == null || results.length() == 0) return -1;
+        final JSONObject result = results.optJSONObject(0);
+        if (result == null || !result.optBoolean("success")) return -1;
+        return result.optLong("delay", -1);
+    }
+
     // ---------- Xray ----------
 
     private static synchronized JSONObject invoke(final String method, final JSONObject payload)
